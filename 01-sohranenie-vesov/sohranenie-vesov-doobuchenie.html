@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Сохранение весов и дообучение</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+:root{
+  --ink:#111a24; --deep:#0c141c; --surface:#182432; --surface2:#1f2e3f;
+  --line:#2b3d52; --line-soft:#223244;
+  --text:#e7edf4; --dim:#9dafc2; --faint:#6b8099;
+  --amber:#e0913f; --amber-hi:#f4ac5c; --amber-dim:rgba(224,145,63,.14);
+  --teal:#54b6a4; --rose:#d4705f; --violet:#9a8ac9;
+  --serif:"IBM Plex Serif",Cambria,Georgia,serif;
+  --sans:"IBM Plex Sans","Segoe UI",Tahoma,sans-serif;
+  --mono:"IBM Plex Mono",Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{background:var(--deep);color:var(--text);font-family:var(--sans);margin:0;min-height:100vh;overflow:hidden}
+#fit{position:fixed;width:1280px;height:720px;transform-origin:top left}
+#wrap{position:absolute;inset:0;background:var(--ink);overflow:hidden;box-shadow:0 0 0 1px var(--line-soft),0 30px 80px rgba(0,0,0,.55)}
+.slide{position:absolute;inset:0;padding:40px 60px 60px;display:none;flex-direction:column;gap:12px}
+.slide.on{display:flex;animation:in .32s ease both}
+@keyframes in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.slide.on .stagger > *{animation:rise .42s ease both}
+.slide.on .stagger > *:nth-child(2){animation-delay:.08s}
+.slide.on .stagger > *:nth-child(3){animation-delay:.16s}
+.slide.on .stagger > *:nth-child(4){animation-delay:.24s}
+.slide.on .stagger > *:nth-child(5){animation-delay:.32s}
+.slide.on .stagger > *:nth-child(6){animation-delay:.40s}
+@media (prefers-reduced-motion:reduce){.slide.on,.slide.on .stagger > *{animation:none!important}}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--amber);display:flex;align-items:center;gap:14px;flex:none}
+.eyebrow::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+h1{font-family:var(--serif);font-size:40px;line-height:1.08;margin:0;font-weight:600;text-wrap:balance;flex:none}
+h1.big{font-size:64px}
+.sub{font-size:16.5px;color:var(--dim);line-height:1.5;max-width:90ch;margin:0;flex:none}
+.foot{position:absolute;left:60px;right:60px;bottom:20px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.14em;text-transform:uppercase}
+.kicker{background:var(--amber-dim);border-left:3px solid var(--amber);padding:10px 16px;font-size:15.5px;line-height:1.45;color:#f0dcc4;flex:none}
+.kicker b{color:var(--amber-hi);font-weight:600}
+.kicker.teal{background:rgba(84,182,164,.12);border-left-color:var(--teal);color:#cfe8e2}.kicker.teal b{color:var(--teal)}
+.kicker.rose{background:rgba(212,112,95,.12);border-left-color:var(--rose);color:#efd2cc}.kicker.rose b{color:var(--rose)}
+.cols{display:grid;gap:14px;min-height:0}
+.grow{flex:1;min-height:0}
+.c2{grid-template-columns:1fr 1fr}.c2n{grid-template-columns:1fr 1.25fr}.c2w{grid-template-columns:1.25fr 1fr}.c3{grid-template-columns:repeat(3,1fr)}.c4{grid-template-columns:repeat(4,1fr)}
+.panel{background:var(--surface);border:1px solid var(--line-soft);padding:13px 16px;display:flex;flex-direction:column;gap:8px;min-height:0;min-width:0}
+.panel h3{margin:0;font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--amber);flex:none}
+.panel h3.t{color:var(--teal)}.panel h3.v{color:var(--violet)}.panel h3.r{color:var(--rose)}
+.panel p{margin:0;font-size:14.5px;line-height:1.5;color:var(--dim)}
+.panel strong{color:var(--text);font-weight:600}
+ul.list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+ul.list li{font-size:14.5px;line-height:1.4;padding-left:22px;position:relative;color:var(--text)}
+ul.list li::before{content:"";position:absolute;left:4px;top:.55em;width:7px;height:7px;background:var(--amber);transform:rotate(45deg)}
+.small{font-size:13px;line-height:1.45}.dim{color:var(--dim)}
+pre{font-family:var(--mono);font-size:13px;line-height:1.5;margin:0;background:var(--deep);border:1px solid var(--line-soft);padding:9px 12px;overflow:auto;color:#dbe6f0;white-space:pre;flex:none}
+pre .k,.codex .k{color:var(--violet)}pre .s,.codex .s{color:var(--teal)}pre .c,.codex .c{color:var(--faint);font-style:italic}pre .n,.codex .n{color:var(--amber-hi)}
+code{font-family:var(--mono);font-size:.92em;color:var(--amber-hi)}
+button{font-family:var(--sans);cursor:pointer;border:1px solid var(--line);background:var(--surface2);color:var(--text);font-size:14px;padding:7px 13px;transition:.15s}
+button:hover{border-color:var(--amber);color:var(--amber-hi)}
+button.on{border-color:var(--amber);background:var(--amber-dim);color:var(--amber-hi)}
+.rowbtn{display:flex;gap:9px;align-items:center;flex-wrap:wrap;flex:none}
+.verdict{font-family:var(--mono);font-size:13px;color:var(--dim);min-height:18px;flex:none;line-height:1.4}
+.verdict.good{color:var(--teal)}.verdict.bad{color:var(--rose)}
+input[type=range]{accent-color:var(--amber)}
+canvas{display:block;flex:none;max-width:100%;height:auto!important}
+.codex{font-family:var(--mono);font-size:13px;line-height:1.52;background:var(--deep);border:1px solid var(--line-soft);padding:7px 0;overflow:auto;min-height:0;color:#dbe6f0}
+.codex .cl{white-space:pre;padding:0 12px;border-left:3px solid transparent;min-height:1.52em}
+.codex .cl.has{cursor:pointer;border-left-color:var(--line)}
+.codex .cl.has:hover{background:rgba(255,255,255,.035)}
+.codex .cl.sel{background:var(--amber-dim);border-left-color:var(--amber)}
+.note{background:var(--surface2);border:1px solid var(--line);padding:10px 14px;font-size:15px;line-height:1.5;color:var(--text);min-height:74px;flex:none}
+.note code{font-size:.9em}
+.hint{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.08em;flex:none}
+.map{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.mblk{background:var(--surface);border:1px solid var(--line-soft);padding:13px;display:flex;flex-direction:column;gap:5px;transition:.3s;min-height:150px}
+.mblk .no{font-family:var(--mono);font-size:12px;color:var(--amber)}
+.mblk b{font-size:17px;font-weight:600}
+.mblk span{font-size:13.5px;color:var(--dim);line-height:1.4}
+.mblk .tp{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-top:auto}
+.mblk.on{border-color:var(--amber);background:var(--amber-dim);transform:translateY(-4px)}
+.pipe{display:flex;align-items:center;gap:10px;flex-wrap:nowrap}
+.pbox{background:var(--deep);border:1px solid var(--line);padding:8px 12px;min-width:160px;text-align:center}
+.pbox small{display:block;font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.12em;text-transform:uppercase}
+.pbox b{display:block;font-family:var(--mono);font-size:26px;color:var(--amber-hi);font-weight:500}
+.pbox span{font-size:12px;color:var(--dim);font-family:var(--mono)}
+.parrow{font-family:var(--mono);font-size:12px;color:var(--dim);text-align:center;line-height:1.3}
+.exrow{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center}
+.exrow .who b{display:block;font-size:15px}.exrow .who span{font-size:12.5px;color:var(--dim)}
+.xbar{position:relative;height:25px;background:var(--deep);border:1px solid var(--line-soft);margin:3px 0}
+.xbar i{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(84,182,164,.45);transition:width .9s}
+.xbar i.bad{background:rgba(212,112,95,.5)}
+.xbar em{position:absolute;left:8px;top:3px;font-size:12.5px;font-style:normal;color:var(--text)}
+.xbar span{position:absolute;right:8px;top:3px;font-family:var(--mono);font-size:12.5px}
+.cells{display:flex;gap:6px;flex:none}
+.cell{width:54px;height:46px;display:grid;place-items:center;font-family:var(--mono);font-size:14px;border:1px solid var(--line)}
+table.tt{border-collapse:collapse;font-family:var(--mono);font-size:12px}
+.tt td{width:36px;height:30px;text-align:center;border:1px solid var(--line-soft)}
+.tt th{font-weight:400;color:var(--faint);text-align:left;padding-right:8px;font-size:11px;white-space:nowrap}
+.readout{font-family:var(--mono);font-size:15px;color:var(--amber-hi)}
+</style>
+</head>
+<body>
+<div id="fit"><div id="wrap">
+
+
+<style>
+/* ===== компоненты: берите нужные, лишние можно удалить ===== */
+.out{font-family:var(--mono);font-size:12.5px;line-height:1.45;background:#0a1118;border:1px solid var(--line-soft);border-left:3px solid var(--teal);padding:9px 12px;color:#bcd3cb;white-space:pre;overflow:auto;flex:none}
+.out b{color:var(--teal);font-weight:500}.out i{color:var(--rose);font-style:normal}
+.pipbox{background:rgba(224,145,63,.1);border:1px solid var(--amber);border-left-width:4px;padding:10px 14px;display:flex;flex-direction:column;gap:6px;flex:none}
+.pipbox .cmd{font-family:var(--mono);font-size:17px;color:var(--amber-hi)}
+.pipbox .what{font-size:13.5px;color:var(--dim);line-height:1.45}.pipbox .what b{color:var(--text);font-weight:600}
+.formula{background:var(--deep);border:1px solid var(--line);padding:13px 18px;font-family:var(--mono);font-size:18px;color:var(--text);text-align:center;line-height:1.7;flex:none}
+.formula em{font-style:normal;color:var(--amber-hi)}.formula s{text-decoration:none;color:var(--teal)}
+.term{background:var(--surface2);border:1px solid var(--line);padding:9px 13px;display:flex;flex-direction:column;gap:2px}
+.term b{font-size:15px;color:var(--amber-hi)}.term span{font-size:13.5px;color:var(--dim);line-height:1.4}
+.anat{font-family:var(--mono);font-size:16.5px;background:var(--deep);border:1px solid var(--line);padding:14px 16px;line-height:2.2;flex:none}
+.anat .tk{padding:3px 6px;border-bottom:2px dashed var(--line);cursor:pointer;transition:.15s}
+.anat .tk:hover{background:rgba(255,255,255,.06)}
+.anat .tk.on{background:var(--amber-dim);border-bottom-color:var(--amber);color:var(--amber-hi)}
+.anatnote{background:var(--surface2);border:1px solid var(--line);padding:11px 14px;font-size:15px;line-height:1.5;color:var(--text);flex:1;min-height:0}
+.anatnote b{color:var(--amber-hi)}
+.anatnote .lbl{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;color:var(--teal);display:block;margin-bottom:4px}
+.lines{font-family:var(--mono);font-size:13.5px;line-height:1.75;background:var(--deep);border:1px solid var(--line-soft);padding:10px 12px;color:#dbe6f0;white-space:pre;overflow:auto;min-height:0}
+.lines .ln{display:block;padding:0 6px;border-left:3px solid transparent}
+.lines .ln.on{background:var(--amber-dim);border-left-color:var(--amber)}
+.step{background:var(--surface);border:1px solid var(--line-soft);border-left:3px solid var(--teal);padding:11px 14px;display:flex;flex-direction:column;gap:7px;min-height:0;min-width:0}
+.step .num{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--teal)}
+.step h4{margin:0;font-size:16.5px;color:var(--text);font-weight:600}
+.step p{margin:0;font-size:14.5px;color:var(--dim);line-height:1.45}
+.step .exp{font-family:var(--mono);font-size:12.5px;color:#bcd3cb;background:#0a1118;border:1px solid var(--line-soft);padding:6px 9px;white-space:pre;overflow:auto}
+.step .hint{display:none;font-size:13px;color:var(--faint);line-height:1.4;border-top:1px dashed var(--line);padding-top:6px}
+.step .hint.on{display:block}
+.cols > *{min-width:0}
+.qgrid{display:flex;flex-direction:column;gap:6px;min-height:0}
+.qrow{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line-soft);padding:6px 10px}
+.qrow .txt{flex:1;font-family:var(--mono);font-size:13px;line-height:1.4;color:var(--text);min-width:0;white-space:pre-wrap}
+.qrow .why{display:none;font-family:var(--sans);font-size:12.5px;color:var(--faint);margin-top:3px;white-space:normal}.qrow .why.on{display:block}
+.qbtn{font-family:var(--mono);font-size:11.5px;padding:5px 8px;flex:none}
+.qbtn.on{border-color:var(--amber);background:var(--amber-dim);color:var(--amber-hi)}
+.qrow.ok{border-color:var(--teal)}.qrow.no{border-color:var(--rose)}
+.olist{display:flex;flex-direction:column;gap:6px}
+.ostep{display:flex;align-items:center;gap:12px;text-align:left;font-family:var(--mono);font-size:14px;padding:7px 14px}
+.ostep .oi{width:26px;height:26px;display:grid;place-items:center;border:1px solid var(--line);color:var(--faint);flex:none}
+.ostep.on .oi{border-color:var(--amber);color:var(--amber-hi)}
+.ostep.ok{border-color:var(--teal)}.ostep.no{border-color:var(--rose)}
+.ostep em{margin-left:auto;font-style:normal;font-size:12.5px;color:var(--rose);font-family:var(--sans)}
+.gridin{display:grid;gap:4px}
+.gridin input{width:58px;height:46px;font-family:var(--mono);font-size:17px;text-align:center;background:var(--deep);color:var(--amber-hi);border:1px solid var(--line)}
+.gridin input.ok{border-color:var(--teal);background:rgba(84,182,164,.15)}
+.gridin input.no{border-color:var(--rose);background:rgba(212,112,95,.15)}
+.slrow{display:grid;grid-template-columns:118px 1fr 52px;gap:10px;align-items:center;font-family:var(--mono);font-size:13px}
+.slrow span:last-child{color:var(--amber-hi);text-align:right}
+.warn{font-family:var(--mono);font-size:12px;color:var(--rose);letter-spacing:.06em}
+#wrap{user-select:none}
+#wrap input,#wrap textarea{user-select:text}
+/* запрет копирования кода со слайдов — включайте, когда студенты должны набирать руками
+#wrap{user-select:none}
+#wrap input,#wrap textarea{user-select:text}
+*/
+</style>
+
+<style>
+.out.wrap{white-space:pre-wrap}
+.ttab{border-collapse:collapse;font-size:14px;width:100%}
+.ttab th{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);text-align:left;font-weight:400;padding:6px 10px;border-bottom:1px solid var(--line)}
+.ttab td{padding:7px 10px;border-bottom:1px solid var(--line-soft);color:var(--text);vertical-align:top}
+.ttab td code{font-size:13px}
+.ttab td.dim{color:var(--dim)}
+.flist{font-family:var(--mono);font-size:13.5px;line-height:1.75;background:var(--deep);border:1px solid var(--line-soft);padding:8px 0}
+.flist div{padding:0 12px;border-left:3px solid transparent;transition:.25s}
+.flist div.best{background:rgba(84,182,164,.16);border-left-color:var(--teal);color:var(--teal)}
+.flist div b{font-weight:500;color:var(--amber-hi)}
+.err{display:flex;flex-direction:column;gap:6px}
+.err .fix{font-size:13.5px;color:var(--dim);line-height:1.45}.err .fix b{color:var(--teal);font-weight:600}
+.big-num{font-family:var(--mono);font-size:30px;color:var(--amber-hi)}
+.legend{display:flex;gap:16px;font-family:var(--mono);font-size:12px;color:var(--dim);flex-wrap:wrap}
+.legend i{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-1px}
+.check{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px}
+.check li{font-size:14.5px;line-height:1.4;padding-left:28px;position:relative}
+.check li::before{content:"";position:absolute;left:2px;top:2px;width:15px;height:15px;border:1.5px solid var(--teal)}
+.ttab td code{white-space:nowrap}
+#s14 .out{font-size:11.5px}
+</style>
+
+<!-- 01 · ТИТУЛ -->
+<section class="slide" id="s1" data-sec="Начало">
+  <div class="eyebrow">Machine Learning · сохранение весов и дообучение</div>
+  <div class="cols grow" style="grid-template-columns:1fr 420px;align-items:center">
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <h1 class="big">Сохранить,<br>загрузить,<br>дообучить</h1>
+      <div style="font-family:var(--serif);font-size:23px;line-height:1.4;color:var(--amber-hi)">Обучаем один раз — пользуемся сколько угодно и учим дальше</div>
+      <div class="sub">Веса в файле, проверочная выборка, чекпоинты каждой эпохи и дообучение на меньшем шаге.</div>
+      <div style="display:flex;gap:28px;font-family:var(--mono);font-size:12.5px;color:var(--faint);letter-spacing:.1em"><span>ИБРАХИМ · ПРЕПОДАВАТЕЛЬ</span><span>7 БЛОКОВ ПРАКТИКИ</span><span>ДАТАСЕТ ЦВЕТОВ</span></div>
+    </div>
+    <canvas id="tiCv" width="410" height="330"></canvas>
+  </div>
+</section>
+
+<!-- БИБЛИОТЕКИ -->
+<section class="slide" id="sLib" data-sec="Библиотеки">
+  <div class="eyebrow">Инструменты · что импортируем и зачем</div>
+  <h1>Библиотеки занятия</h1>
+  <div class="pipbox"><span class="cmd">pip install torch torchvision numpy pillow matplotlib gdown</span><span class="what">В Colab <b>всё уже установлено</b> — ставить нужно только на своём компьютере. Имя пакета и имя для <code>import</code> иногда разные: пакет <b>pillow</b> импортируется как <code>PIL</code>.</span></div>
+  <table class="ttab" style="font-size:13.5px">
+    <tr><th style="width:30%">import</th><th>зачем на этом занятии</th></tr>
+    <tr><td><code>import os</code></td><td class="dim">пути к файлам, создать папку для весов, размер файла</td></tr>
+    <tr><td><code>import glob</code></td><td class="dim">список файлов по шаблону: все фото класса, все файлы весов запуска</td></tr>
+    <tr><td><code>import zipfile</code></td><td class="dim">распаковать архив с датасетом</td></tr>
+    <tr><td><code>import gdown</code></td><td class="dim">скачать архив с Google Диска по его id</td></tr>
+    <tr><td><code>import datetime</code></td><td class="dim">дата и время в имени файла весов</td></tr>
+    <tr><td><code>from google.colab import drive</code></td><td class="dim">подключить Google Диск — там веса переживут конец сеанса</td></tr>
+    <tr><td><code>TensorDataset, DataLoader</code></td><td class="dim">раздать картинки пачками по 64 и перемешать их каждую эпоху</td></tr>
+    <tr><td><code>import numpy as np</code></td><td class="dim">превратить картинку PIL в массив чисел</td></tr>
+    <tr><td><code>from PIL import Image</code></td><td class="dim">открыть фото и привести к размеру IMG × IMG</td></tr>
+    <tr><td><code>import torch · nn · F</code></td><td class="dim">сеть, обучение, <code>torch.save</code> / <code>torch.load</code>, <code>softmax</code></td></tr>
+    <tr><td><code>import matplotlib.pyplot as plt</code></td><td class="dim">показать картинки и графики обучения</td></tr>
+  </table>
+</section>
+
+<!-- 05 · ИНТУИЦИЯ: СОХРАНЕНИЕ В ИГРЕ -->
+<section class="slide" id="s5" data-sec="Интуиция">
+  <div class="eyebrow">Сначала интуиция · сохранение в игре</div>
+  <h1>Сеанс оборвался на 13-й эпохе. Что дальше?</h1>
+  <div class="cols grow" style="grid-template-columns:1.35fr 1fr">
+    <div class="panel">
+      <canvas id="saveCv" width="640" height="300"></canvas>
+      <div class="rowbtn"><button id="saveRun">Запустить обучение</button><span class="verdict" id="saveInfo"></span></div>
+    </div>
+    <div class="panel">
+      <div class="term"><b>Веса</b><span>Всё, чему сеть научилась: числа в ядрах свёрток и в нейронах. У модели занятия их 69 669.</span></div>
+      <ul class="list">
+        <li>Обучение — это долго: минуты на цветах, часы на больших датасетах</li>
+        <li>Colab отключает сеанс при простое, и папка <code>/content</code> стирается</li>
+        <li>Чтобы пользоваться сетью в приложении, нужны только веса — учить заново незачем</li>
+      </ul>
+      <div class="kicker">Сохранили веса — сохранили <b>результат обучения</b>. Как сейв в игре: умер — продолжаешь с последней точки.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 06 · STATE_DICT -->
+<section class="slide" id="s6" data-sec="state_dict">
+  <div class="eyebrow">Что внутри · model.state_dict()</div>
+  <h1>Веса — это словарь: имя слоя → тензор</h1>
+  <div class="cols grow" style="grid-template-columns:1fr 1.1fr">
+    <div class="panel">
+      <h3 class="t">Настоящий вывод для модели занятия</h3>
+      <pre>for name, w in model.state_dict().items():
+    print(f'{name:10s} {tuple(w.shape)}')</pre>
+      <div class="out">0.weight   (16, 3, 3, 3)
+0.bias     (16,)
+3.weight   (32, 16, 3, 3)
+3.bias     (32,)
+6.weight   (64, 32, 3, 3)
+6.bias     (64,)
+11.weight  (5, 9216)
+11.bias    (5,)</div>
+    </div>
+    <div class="panel">
+      <h3>Как читать</h3>
+      <ul class="list">
+        <li><code>0.weight</code> — слой номер 0 в <code>Sequential</code>, это первая свёртка: 16 ядер по 3 канала 3×3</li>
+        <li>Номеров 1, 2, 4, 5… нет: у <code>ReLU</code>, <code>MaxPool2d</code>, <code>Flatten</code>, <code>Dropout</code> весов нет</li>
+        <li><code>11.weight (5, 9216)</code> — последний <code>Linear</code>: 5 классов × 9216 входов</li>
+        <li>Все числа вместе — 69 669, файл весит около 275 КБ</li>
+      </ul>
+      <div class="kicker">В файл попадают <b>только числа</b>. Архитектуры там нет — модель для загрузки создаём тем же кодом.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 07 · SAVE / LOAD -->
+<section class="slide" id="s7" data-sec="save и load">
+  <div class="eyebrow">Разбор вызова · сохранить и загрузить</div>
+  <h1>Две строки: в файл и обратно</h1>
+  <div class="sub">Нажимайте на подчёркнутые куски.</div>
+  <div class="anat" id="slAnat" style="white-space:pre"></div>
+  <div class="cols grow" style="grid-template-columns:1.15fr 1fr">
+    <div class="panel"><h3 class="t">Разбор</h3><div class="anatnote" id="slAnatNote"></div></div>
+    <div class="panel">
+      <h3>Проверка, что загрузилось (настоящий вывод)</h3>
+      <div class="out">новая модель    : loss 1.6081, точность <i>0.204</i>
+после загрузки  : loss 1.0538, точность <b>0.594</b>
+исходная модель : loss 1.0538, точность <b>0.594</b></div>
+      <p class="small">Новая модель угадывает: 0.204 ≈ 1 из 5 классов. После загрузки — до последней цифры как у исходной.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 08 · ГДЕ ХРАНИТЬ + KERAS -->
+<section class="slide" id="s8" data-sec="Google Диск">
+  <div class="eyebrow">Где хранить · и как это в Keras</div>
+  <h1>Веса — на Google Диск, а не в /content</h1>
+  <div class="cols grow" style="grid-template-columns:1fr 1.3fr">
+    <div class="panel">
+      <h3>Подключить Диск в Colab</h3>
+      <pre><span class="k">from</span> google.colab <span class="k">import</span> drive
+drive.mount(<span class="s">'/content/drive'</span>)
+SAVE_DIR = <span class="s">'/content/drive/MyDrive/IThub/ML/weights'</span>
+os.makedirs(SAVE_DIR, exist_ok=<span class="k">True</span>)</pre>
+      <ul class="list">
+        <li><code>drive.mount</code> один раз за сеанс просит разрешить доступ к Диску</li>
+        <li><code>/content/drive/MyDrive</code> — это корень вашего Диска</li>
+        <li><code>exist_ok=True</code> — не ругаться, если папка уже есть</li>
+      </ul>
+      <div class="kicker rose">Без <code>drive.mount</code> путь не существует: <b>FileNotFoundError</b>.</div>
+    </div>
+    <div class="panel">
+      <h3 class="v">Методичка LXP написана на Keras</h3>
+      <table class="ttab" style="font-size:13px">
+        <tr><th>действие</th><th>PyTorch</th><th>Keras</th></tr>
+        <tr><td>сохранить</td><td><code>torch.save(model.state_dict(), p)</code></td><td><code>model.save_weights(p)</code></td></tr>
+        <tr><td>загрузить</td><td><code>model.load_state_dict(torch.load(p))</code></td><td><code>model.load_weights(p)</code></td></tr>
+        <tr><td>после эпохи</td><td>свой <code>callback</code> в <code>fit</code></td><td><code>callbacks.ModelCheckpoint</code></td></tr>
+        <tr><td>файл</td><td><code>.pt</code></td><td><code>.hdf5</code>, <code>.weights.h5</code></td></tr>
+      </table>
+      <p class="small">Идея одна и та же. Мы пишем на PyTorch, как и весь курс.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 09 · ПРОВЕРОЧНАЯ ВЫБОРКА -->
+<section class="slide" id="s9" data-sec="Проверочная выборка">
+  <div class="eyebrow">Проверочная выборка · сначала перемешать</div>
+  <h1>Экзамен — на задачах, которых сеть не видела</h1>
+  <div class="cols grow" style="grid-template-columns:1.35fr 1fr">
+    <div class="panel">
+      <canvas id="splitCv" width="640" height="250"></canvas>
+      <div class="legend" id="splitLegend"></div>
+      <div class="rowbtn"><button id="cutRaw">Отрезать 15 % сразу</button><button id="shuffle">Перемешать</button><button id="cutMixed">Отрезать после перемешивания</button></div>
+      <div class="verdict" id="splitInfo">Схема: одна клетка ≈ 43 фото. Картинки лежат по порядку классов.</div>
+    </div>
+    <div class="panel">
+      <div class="term"><b>Проверочная выборка</b><span>Часть данных, на которой сеть <strong>не учится</strong>. По ней видно, научилась сеть или зазубрила.</span></div>
+      <ul class="list">
+        <li><code>x_train</code>, <code>y_train</code> — учим</li>
+        <li><code>x_val</code>, <code>y_val</code> — проверяем после каждой эпохи</li>
+        <li>4317 фото → 3670 на обучение и 647 на проверку (15 %)</li>
+        <li>По ней выбираем лучшую эпоху и решаем, помогло ли дообучение</li>
+      </ul>
+      <div class="kicker">Номера сначала <b>перемешиваем</b> (<code>torch.randperm</code>), потом режем.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 10 · ПЕРЕОБУЧЕНИЕ -->
+<section class="slide" id="s10" data-sec="Лучшая эпоха">
+  <div class="eyebrow">Зачем сохранять каждую эпоху</div>
+  <h1>Последняя эпоха — не обязательно лучшая</h1>
+  <div class="cols grow" style="grid-template-columns:1.45fr 1fr">
+    <div class="panel">
+      <canvas id="ovCv" width="680" height="330"></canvas>
+      <div class="legend"><span><i style="background:#9a8ac9"></i>ошибка на обучающей</span><span><i style="background:#e0913f"></i>ошибка на проверочной</span><span><i style="background:#54b6a4"></i>лучшая эпоха</span></div>
+    </div>
+    <div class="panel">
+      <h3 class="t">Настоящий запуск · 20 эпох, lr = 0.001</h3>
+      <ul class="list">
+        <li>Ошибка на <strong>обучающей</strong> падает почти всё время: сеть всё лучше знает свои картинки</li>
+        <li>Ошибка на <strong>проверочной</strong> скачет: на 18-й эпохе 0.857 против 0.714 на 17-й</li>
+        <li>Лучшая — <strong>17-я</strong>: val_loss 0.7137, точность 0.726</li>
+        <li>Если учить дальше, разрыв растёт — это <strong>переобучение</strong></li>
+      </ul>
+      <div class="kicker">Сохраняем веса <b>после каждой эпохи</b>, а потом берём файл с наименьшей ошибкой на проверке.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 11 · ШАБЛОН ИМЕНИ -->
+<section class="slide" id="s11" data-sec="Чекпоинты">
+  <div class="eyebrow">Чекпоинты · имя файла рассказывает всё</div>
+  <h1>Дата, эпоха и ошибка — прямо в имени файла</h1>
+  <div class="anat" id="nmAnat" style="font-size:15.5px"></div>
+  <div class="cols grow" style="grid-template-columns:1.1fr 1fr">
+    <div class="panel"><h3 class="t">Разбор</h3><div class="anatnote" id="nmAnatNote"></div></div>
+    <div class="panel">
+      <h3>Подстановка чисел (настоящий вывод)</h3>
+      <pre>print(weights.format(epoch=<span class="n">7</span>, val_loss=<span class="n">0.8123449</span>))</pre>
+      <div class="out">weights/flowers-2026-10-04_22-12_<b>007</b>-<b>0.812345</b>.pt</div>
+      <h3 class="v" style="margin-top:6px">callback — «позвони мне после эпохи»</h3>
+      <pre><span class="c"># внутри готовой fit, в конце каждой эпохи:</span>
+<span class="k">if</span> callback:
+    callback(model, epoch, val_loss)</pre>
+      <p class="small">Свою функцию <code>checkpoint</code> вы передадите в <code>fit</code>, и она будет сохранять веса сама.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 12 · ЛУЧШИЙ ФАЙЛ -->
+<section class="slide" id="s12" data-sec="Чекпоинты">
+  <div class="eyebrow">Чекпоинты · какой файл грузить</div>
+  <h1>Сеанс упал — по именам файлов находим лучший</h1>
+  <div class="cols grow" style="grid-template-columns:1.2fr 1fr">
+    <div class="panel">
+      <h3>Папка весов после первого цикла (настоящие имена, эпохи 10–20)</h3>
+      <div class="flist" id="fileList"></div>
+      <div class="rowbtn"><button id="findBest">Найти лучший</button><span class="verdict" id="bestInfo"></span></div>
+    </div>
+    <div class="panel">
+      <h3 class="t">Как достать ошибку из имени</h3>
+      <pre>p = <span class="s">'flowers-2026-10-04_22-12_017-0.713699.pt'</span>
+p[:-<span class="n">3</span>].rsplit(<span class="s">'-'</span>, <span class="n">1</span>)</pre>
+      <div class="out">['flowers-2026-10-04_22-12_017', <b>'0.713699'</b>]</div>
+      <ul class="list">
+        <li><code>p[:-3]</code> — отрезали <code>.pt</code></li>
+        <li><code>rsplit('-', 1)</code> — один разрез по <strong>последнему</strong> дефису: дефисы в дате не мешают</li>
+        <li>Дальше <code>float(...)</code> и минимум по всем файлам</li>
+      </ul>
+      <div class="kicker">Лучший файл — с <b>наименьшим val_loss</b>, а не самый свежий.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 13 · ДООБУЧЕНИЕ: ИНТУИЦИЯ -->
+<section class="slide" id="s13" data-sec="Дообучение">
+  <div class="eyebrow">Дообучение · сначала интуиция</div>
+  <h1>Большими шагами яму не найти — нужны маленькие</h1>
+  <div class="cols grow" style="grid-template-columns:1.35fr 1fr">
+    <div class="panel">
+      <canvas id="lrCv" width="640" height="300"></canvas>
+      <div class="rowbtn"><button id="lrBig">Шаг большой · lr = 0.001</button><button id="lrSmall">Шаг маленький · lr = 0.0001</button><span class="verdict" id="lrInfo">схематично</span></div>
+    </div>
+    <div class="panel">
+      <div class="term"><b>Дообучение</b><span>Продолжаем учить <strong>уже обученную</strong> сеть с сохранённых весов, а не с нуля.</span></div>
+      <ul class="list">
+        <li>Большой <code>lr</code> быстро приводит в нужную долину, но потом сеть прыгает со склона на склон</li>
+        <li>Загрузили <strong>лучшие</strong> веса, уменьшили <code>lr</code> в 10 раз — и спускаемся аккуратно</li>
+        <li>Циклов может быть несколько: 0.001 → 0.0001 → 0.00001</li>
+      </ul>
+      <div class="kicker">Дообучение = <b>лучшие веса</b> + <b>lr в 10 раз меньше</b> + тот же журнал эпох.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 14 · ДООБУЧЕНИЕ: РЕЗУЛЬТАТ -->
+<section class="slide" id="s14" data-sec="Дообучение">
+  <div class="eyebrow">Дообучение · настоящий запуск</div>
+  <h1>Два цикла на одном графике</h1>
+  <div class="cols grow" style="grid-template-columns:1.45fr 1fr">
+    <div class="panel">
+      <canvas id="ftCv" width="680" height="330"></canvas>
+      <div class="legend"><span><i style="background:#9a8ac9"></i>обучающая</span><span><i style="background:#e0913f"></i>проверочная</span><span><i style="background:#6b8099"></i>граница циклов</span></div>
+    </div>
+    <div class="panel">
+      <h3 class="t">Лучшие эпохи циклов</h3>
+      <div class="out">цикл 1, lr 0.001 : эпоха 17 | val_loss 0.7137 | acc 0.726
+цикл 2, lr 0.0001: эпоха 26 | val_loss <b>0.6824</b> | acc <b>0.756</b></div>
+      <ul class="list">
+        <li>Во втором цикле кривая проверки <strong>перестала скакать</strong></li>
+        <li>Точность выросла на 3 процентных пункта: 0.726 → 0.756</li>
+        <li>Чем сильнее «дрожал» первый цикл, тем больше даёт дообучение</li>
+      </ul>
+      <div class="kicker teal">Номера эпох <b>продолжаются</b>: 21…26. Пунктир — момент, когда загрузили лучшие веса и уменьшили lr.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 15 · НОВЫЕ ДАННЫЕ -->
+<section class="slide" id="s15" data-sec="Новые данные">
+  <div class="eyebrow">Дообучение · когда пришли новые данные</div>
+  <h1>Добавили фото — учим дальше, а не с нуля</h1>
+  <div class="cols c2 grow">
+    <div class="panel">
+      <h3>Порядок действий</h3>
+      <div class="olist" style="gap:8px">
+        <div class="ostep on" style="cursor:default"><span class="oi">1</span><span>создать модель тем же кодом и загрузить веса</span></div>
+        <div class="ostep on" style="cursor:default"><span class="oi">2</span><span>добавить новые фото к старым: <code>torch.cat</code></span></div>
+        <div class="ostep on" style="cursor:default"><span class="oi">3</span><span>учить несколько эпох с маленьким <code>lr</code></span></div>
+        <div class="ostep on" style="cursor:default"><span class="oi">4</span><span>сравнить на <strong>той же</strong> проверочной выборке</span></div>
+      </div>
+      <p class="small">Учить только на новых фото опасно: сеть подстроится под них и забудет старые.</p>
+    </div>
+    <div class="panel err">
+      <h3 class="r">А если добавили новый класс?</h3>
+      <p>Выход сети станет на один нейрон больше — последний слой не совпадёт по форме (настоящая ошибка):</p>
+      <div class="out wrap"><i>size mismatch for 11.weight: copying a param with shape torch.Size([5, 9216]) from checkpoint, the shape in current model is torch.Size([6, 9216]).</i></div>
+      <div class="fix">Свёрточные слои можно взять из старых весов, а последний слой учится заново. <b>Это уже перенос обучения</b> — к нему вернёмся на предобученных сетях.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 16 · ОШИБКИ -->
+<section class="slide" id="s16" data-sec="Ошибки">
+  <div class="eyebrow">Частые ошибки</div>
+  <h1>Что ломается при сохранении и дообучении</h1>
+  <table class="ttab" style="font-size:14.5px">
+    <tr><th style="width:27%">симптом</th><th style="width:38%">почему</th><th>как чинить</th></tr>
+    <tr><td><code>size mismatch</code>, <code>Missing key(s)</code></td><td class="dim">модель создана другим кодом, чем при сохранении</td><td>создавать модель той же функцией <code>make_model()</code></td></tr>
+    <tr><td><code>FileNotFoundError</code></td><td class="dim">Диск не подключён или опечатка в пути</td><td>запустить <code>drive.mount</code>, напечатать путь и <code>os.listdir</code></td></tr>
+    <tr><td>после «дообучения» точность как в первую эпоху</td><td class="dim">перед <code>fit</code> снова вызвали <code>make_model()</code> — учили с нуля</td><td>загружать веса в модель и учить <strong>её</strong></td></tr>
+    <tr><td>дообучение испортило модель</td><td class="dim"><code>lr</code> такой же большой, как в первом цикле</td><td>уменьшить <code>lr</code> в 10 раз</td></tr>
+    <tr><td>точность на проверке 1.0 или 0.0</td><td class="dim">не перемешали — в проверке один класс</td><td><code>torch.randperm</code> перед срезами</td></tr>
+    <tr><td>после перезапуска ячейки выборка стала меньше</td><td class="dim">режем <code>x_train</code>, который уже разрезан: 4317 → 3670 → 3120</td><td>исходные массивы держим отдельно: <code>x_all</code>, <code>y_all</code></td></tr>
+  </table>
+</section>
+
+<!-- 17 · ПОРЯДОК -->
+<section class="slide" id="s17" data-sec="Порядок">
+  <div class="eyebrow">Практика · порядок</div>
+  <h1>Расставьте шаги практики по порядку</h1>
+  <div class="sub">Нажимайте на строки в том порядке, в котором будем их делать.</div>
+  <div class="olist grow" id="ord1"></div>
+  <div class="rowbtn"><button id="ord1check">Проверить</button><button id="ord1reset">Сбросить</button><div class="verdict" id="ord1v"></div></div>
+</section>
+
+<!-- 18 · ПРАКТИКА 1 -->
+<section class="slide" id="s18" data-sec="Практика">
+  <div class="eyebrow">Практика · блоки 1–2 · разбираем вместе</div>
+  <h1>Данные и две выборки</h1>
+  <div class="pipbox"><span class="cmd">pip install gdown</span><span class="what"><b>gdown</b> качает файлы с Google Диска по id. В Colab <b>уже установлен</b>, ставить надо только на своём компьютере. В коде: <code>import gdown</code> — имя то же.</span></div>
+  <div class="cols c3 grow" id="pr1"></div>
+  <div class="rowbtn"><button data-hint="pr1">Показать подсказки</button><span class="small dim">Ноутбук практики, блоки 1 и 2.</span></div>
+</section>
+
+<!-- 19 · ПРАКТИКА 2 -->
+<section class="slide" id="s19" data-sec="Практика">
+  <div class="eyebrow">Практика · блоки 3–4 · разбираем вместе</div>
+  <h1>Обучить, сохранить, загрузить</h1>
+  <div class="cols c3 grow" id="pr2"></div>
+  <div class="rowbtn"><button data-hint="pr2">Показать подсказки</button><span class="small dim">Ноутбук практики, блоки 3 и 4. Функции <code>fit</code> и <code>evaluate</code> — готовые.</span></div>
+</section>
+
+<!-- 20 · ПРАКТИКА 3 -->
+<section class="slide" id="s20" data-sec="Практика">
+  <div class="eyebrow">Практика · блоки 5–6 · разбираем вместе</div>
+  <h1>Чекпоинты и дообучение</h1>
+  <div class="cols c3 grow" id="pr3"></div>
+  <div class="rowbtn"><button data-hint="pr3">Показать подсказки</button><span class="small dim">Ноутбук практики, блоки 5 и 6. Ваши числа будут немного другими — это нормально.</span></div>
+</section>
+
+<!-- 21 · ДЗ -->
+<section class="slide" id="s21" data-sec="Домашнее задание">
+  <div class="eyebrow">Домашнее задание LXP · 2 балла</div>
+  <h1>«Разделить выборку на обучающую и проверочную»</h1>
+  <div class="sub">Повторить путь занятия самостоятельно, с другими настройками. Раздел «Домашнее задание» в конце ноутбука, у каждого шага — подсказка, где смотреть.</div>
+  <div class="cols grow" style="grid-template-columns:1.3fr 1fr">
+    <div class="panel">
+      <h3>Шаги</h3>
+      <ul class="check">
+        <li>Загрузить картинки заново с <code>IMG = 128</code></li>
+        <li>Разделить: <strong>20 %</strong> в проверку, показать число фото каждого класса</li>
+        <li>Модель под 128 × 128: вход <code>Linear</code> — <code>64 * 16 * 16</code></li>
+        <li>Первый цикл: 15 эпох, <code>lr = 1e-3</code>, веса после каждой эпохи</li>
+        <li>Найти лучший файл по имени, загрузить, проверить точность</li>
+        <li>Дообучить <strong>дважды</strong>: <code>lr = 1e-4</code>, потом снова лучший файл и <code>lr = 1e-5</code></li>
+        <li>Графики и 2–3 предложения вывода: какой цикл лучший, где началось переобучение</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3 class="t">Что сдать</h3>
+      <ul class="list">
+        <li>Ссылку на ноутбук, доступ «всем, у кого есть ссылка»</li>
+        <li>Скриншот папки с весами на Google Диске</li>
+      </ul>
+      <div class="kicker">Перед сдачей: «Среда выполнения → <b>Перезапустить и выполнить все</b>». Вывод должен быть под каждой ячейкой.</div>
+      <div class="kicker teal">Эти же шаги — половина <b>контрольной работы</b> по классификации изображений.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 22 · КВИЗ -->
+<section class="slide" id="s22" data-sec="Проверка себя">
+  <div class="eyebrow">Проверка себя</div>
+  <h1>Восемь вопросов по занятию</h1>
+  <div class="qgrid grow" id="quiz1"></div>
+  <div class="rowbtn"><button id="quiz1check">Проверить</button><button id="quiz1reset">Сбросить</button><div class="verdict" id="quiz1v"></div></div>
+</section>
+
+<!-- 23 · ИТОГИ -->
+<section class="slide" id="s23" data-sec="Итоги">
+  <div class="eyebrow">Итоги</div>
+  <h1>Шпаргалка занятия</h1>
+  <div class="cols c3 grow stagger">
+    <div class="panel"><h3>Веса</h3><p><code>model.state_dict()</code> — словарь «имя слоя → тензор». Только числа, без архитектуры.</p></div>
+    <div class="panel"><h3 class="t">Сохранить и загрузить</h3><pre style="font-size:11.5px;padding:6px 9px">torch.save(model.state_dict(), p)
+model.load_state_dict(torch.load(p))</pre></div>
+    <div class="panel"><h3 class="v">Проверочная выборка</h3><p>Перемешать номера, отрезать 10–20 %. По ней выбираем эпоху и видим переобучение.</p></div>
+    <div class="panel"><h3>Чекпоинт</h3><p>Веса после каждой эпохи, в имени — дата, эпоха и <code>val_loss</code>. Лучший — с наименьшей ошибкой.</p></div>
+    <div class="panel"><h3 class="t">Дообучение</h3><p>Лучшие веса + <code>lr</code> в 10 раз меньше + тот же журнал. Модель заново не создаём.</p></div>
+    <div class="panel"><h3 class="r">Типичная ошибка</h3><p><code>size mismatch</code> — модель создана другим кодом. Создавать той же функцией.</p></div>
+  </div>
+</section>
+
+</div>
+<div id="bar" style="position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--line-soft);z-index:7"><i style="display:block;height:100%;width:0;background:var(--amber);transition:width .3s"></i></div>
+<div id="nav" style="position:absolute;right:18px;bottom:12px;display:flex;gap:6px;z-index:8"><button id="prev" style="padding:3px 10px;font-family:var(--mono);font-size:12px" aria-label="Предыдущий слайд">←</button><button id="next" style="padding:3px 10px;font-family:var(--mono);font-size:12px" aria-label="Следующий слайд">→</button></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var fit = document.getElementById("fit");
+  var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+  var barFill = document.querySelector("#bar i");
+  var cur = 0;
+  function resize() {
+    var k = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    if (!(k > 0)) k = 1;
+    fit.style.transform = "scale(" + k + ")";
+    fit.style.left = ((window.innerWidth - 1280 * k) / 2) + "px";
+    fit.style.top = ((window.innerHeight - 720 * k) / 2) + "px";
+  }
+  window.addEventListener("resize", resize); resize();
+  slides.forEach(function (s, i) {
+    var f = document.createElement("div"); f.className = "foot";
+    f.innerHTML = "<span>" + (s.dataset.sec || "") + "</span><span>" + String(i + 1).padStart(2, "0") + " / " + String(slides.length).padStart(2, "0") + "</span>";
+    s.appendChild(f);
+  });
+  function show(i) {
+    cur = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach(function (s, j) { s.classList.toggle("on", j === cur); });
+    barFill.style.width = ((cur + 1) / slides.length * 100) + "%";
+    slides[cur].dispatchEvent(new CustomEvent("shown"));
+    try { history.replaceState(null, "", "#s" + (cur + 1)); } catch (e) {}
+  }
+  document.getElementById("prev").onclick = function () { show(cur - 1); };
+  document.getElementById("next").onclick = function () { show(cur + 1); };
+  document.addEventListener("keydown", function (e) {
+    var t = e.target && e.target.tagName;
+    if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
+    if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") { show(cur + 1); e.preventDefault(); }
+    else if (e.key === "ArrowLeft" || e.key === "PageUp") { show(cur - 1); e.preventDefault(); }
+    else if (e.key === "Home") show(0);
+    else if (e.key === "End") show(slides.length - 1);
+    else if (e.key === "f" || e.key === "F" || e.key === "а" || e.key === "А") {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+    }
+  });
+
+  /* ---------- помощники ---------- */
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function R(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function cv(id) { var c = $(id), w = c.width, h = c.height; c.style.width = w + "px"; c.style.height = h + "px"; c.width = w * 2; c.height = h * 2; var x = c.getContext("2d"); x.scale(2, 2); x.W = w; x.H = h; return x; }
+  function loop(slide, fn) {
+    var raf = null;
+    function tick(ts) { if (!slide.classList.contains("on")) { raf = null; return; } fn(ts); raf = requestAnimationFrame(tick); }
+    slide.addEventListener("shown", function () { if (!raf) raf = requestAnimationFrame(tick); });
+  }
+  function evPos(e, canvas) { var r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) * parseFloat(canvas.style.width) / r.width, y: (e.clientY - r.top) * parseFloat(canvas.style.height) / r.height }; }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  var C = { amber: "#e0913f", amberHi: "#f4ac5c", teal: "#54b6a4", rose: "#d4705f", violet: "#9a8ac9", text: "#e7edf4", dim: "#9dafc2", faint: "#6b8099", line: "#2b3d52", soft: "#223244", surface: "#182432", deep: "#0c141c" };
+  function font(px, mono) { return px + "px " + (mono === false ? "'IBM Plex Sans', sans-serif" : "'IBM Plex Mono', monospace"); }
+  function hl(line) {
+    var out = "", re = /(#.*$)|(f?"[^"]*"|'[^']*')|\b(import|from|as|for|in|with|def|return|True|False|None|if|else|not|and|or)\b|\b(\d+\.?\d*)\b/g, last = 0, m;
+    while ((m = re.exec(line))) { out += esc(line.slice(last, m.index)); var cls = m[1] ? "c" : m[2] ? "s" : m[3] ? "k" : "n"; out += '<span class="' + cls + '">' + esc(m[0]) + "</span>"; last = re.lastIndex; }
+    return out + esc(line.slice(last));
+  }
+  function codex(id, lines, onSel) {
+    var box = $(id), note = $(id + "Note"), els = [];
+    lines.forEach(function (L, i) {
+      var d = document.createElement("div"); d.className = "cl" + (L[1] ? " has" : "");
+      d.innerHTML = L[0] ? hl(L[0]) : " ";
+      if (L[1]) d.onclick = function () { sel(i); };
+      box.appendChild(d); els.push(d);
+    });
+    function sel(i) { els.forEach(function (e, j) { e.classList.toggle("sel", j === i); }); note.innerHTML = lines[i][1]; if (onSel) onSel(lines[i][2]); }
+    for (var i = 0; i < lines.length; i++) if (lines[i][1]) { sel(i); break; }
+  }
+
+  function quiz(cfg) {
+    var box = $(cfg.box), out = $(cfg.verdict), rows = [];
+    cfg.items.forEach(function (it) {
+      var row = document.createElement("div"); row.className = "qrow";
+      var txt = document.createElement("div"); txt.className = "txt"; txt.innerHTML = esc(it.t) + "<i class='why'></i>"; row.appendChild(txt);
+      var btns = [];
+      it.o.forEach(function (opt, k) {
+        var b = document.createElement("button"); b.className = "qbtn"; b.textContent = opt;
+        b.onclick = function () { row.dataset.pick = String(k); btns.forEach(function (x) { x.classList.remove("on"); }); b.classList.add("on"); out.textContent = ""; out.className = "verdict"; };
+        btns.push(b); row.appendChild(b);
+      });
+      box.appendChild(row); rows.push({ row: row, it: it, btns: btns, why: txt.querySelector(".why") });
+    });
+    $(cfg.check).onclick = function () {
+      var empty = rows.filter(function (r) { return r.row.dataset.pick === undefined; }).length;
+      if (empty) { out.textContent = "Ответьте на все · осталось: " + empty; out.className = "verdict bad"; return; }
+      var ok = 0;
+      rows.forEach(function (r) { r.row.classList.remove("ok", "no"); if (Number(r.row.dataset.pick) === r.it.a) { r.row.classList.add("ok"); ok++; } else r.row.classList.add("no"); r.why.textContent = "Ответ: " + r.it.o[r.it.a] + " · " + r.it.w; r.why.classList.add("on"); });
+      out.textContent = "Верно " + ok + " из " + rows.length; out.className = "verdict " + (ok === rows.length ? "good" : "bad");
+    };
+    $(cfg.reset).onclick = function () { rows.forEach(function (r) { r.row.className = "qrow"; delete r.row.dataset.pick; r.btns.forEach(function (b) { b.classList.remove("on"); }); r.why.textContent = ""; r.why.classList.remove("on"); }); out.textContent = ""; out.className = "verdict"; };
+  }
+
+  
+  /* ================= рисование на canvas ================= */
+  function cap(ctx, t, x, y, col, size) { ctx.fillStyle = col || C.faint; ctx.font = font(size || 12); ctx.textAlign = "center"; ctx.fillText(t, x, y); }
+  function circle(ctx, x, y, r, fill, stroke) { ctx.beginPath(); ctx.arc(x, y, r, 0, 7); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.stroke(); } }
+  function node(ctx, x, y, w, h, label, fill, stroke, col, size) {
+    ctx.fillStyle = fill || "#1f2e3f"; ctx.fillRect(x, y, w, h); ctx.strokeStyle = stroke || C.dim; ctx.strokeRect(x + .5, y + .5, w, h);
+    ctx.fillStyle = col || C.text; ctx.font = font(size || 12); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(label, x + w / 2, y + h / 2); ctx.textBaseline = "alphabetic";
+  }
+  function arrow(ctx, x1, y1, x2, y2, col) {
+    ctx.strokeStyle = col || C.line; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    var a = Math.atan2(y2 - y1, x2 - x1); ctx.fillStyle = col || C.line; ctx.beginPath(); ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - 9 * Math.cos(a - .4), y2 - 9 * Math.sin(a - .4)); ctx.lineTo(x2 - 9 * Math.cos(a + .4), y2 - 9 * Math.sin(a + .4)); ctx.fill(); ctx.lineWidth = 1;
+  }
+
+  /* ================= интерактивные компоненты ================= */
+  /* разбор вызова: части [текст, пояснение|null] */
+  function anat(boxId, parts) {
+    var box = $(boxId), note = $(boxId + "Note"), spans = [];
+    parts.forEach(function (p, i) {
+      var s = document.createElement("span"); s.textContent = p[0];
+      if (p[1]) { s.className = "tk"; s.onclick = function () { sel(i); }; }
+      box.appendChild(s); spans.push(s);
+    });
+    function sel(i) {
+      spans.forEach(function (s, j) { s.classList.toggle("on", j === i); });
+      note.innerHTML = '<span class="lbl">' + esc(parts[i][0].replace(/[\s,]+/g, " ").replace(/^[\s,]+|[\s,]+$/g, "")) + "</span>" + parts[i][1];
+    }
+    for (var k = 0; k < parts.length; k++) if (parts[k][1]) { sel(k); break; }
+  }
+  /* разбор по строкам: строки [текст, пояснение|null]; возвращает {sel, next} */
+  function codeLines(boxId, rows, onStep) {
+    var box = $(boxId), note = $(boxId + "Note"), els = [];
+    rows.forEach(function (r, i) {
+      var d = document.createElement("span"); d.className = "ln"; d.textContent = r[0] || " ";
+      if (r[1]) d.onclick = function () { sel(i); };
+      box.appendChild(d); els.push(d);
+    });
+    function sel(i) { els.forEach(function (e, j) { e.classList.toggle("on", j === i); }); if (note) note.innerHTML = rows[i][1] || ""; if (onStep) onStep(i); }
+    sel(0);
+    return { sel: sel, next: function () { var c = els.findIndex(function (e) { return e.classList.contains("on"); }), n = c; do { n = (n + 1) % rows.length; } while (!rows[n][1] && n !== c); sel(n); } };
+  }
+  /* карточки заданий: [номер, заголовок, условие, ожидаемый вывод, подсказка] */
+  function steps(id, list) {
+    var box = $(id);
+    list.forEach(function (t) {
+      var d = document.createElement("div"); d.className = "step";
+      d.innerHTML = '<span class="num">ЗАДАНИЕ ' + t[0] + '</span><h4>' + esc(t[1]) + "</h4><p>" + esc(t[2]) + '</p><div class="exp">' + esc(t[3]) + '</div><div class="hint">Подсказка: ' + esc(t[4]) + "</div>";
+      box.appendChild(d);
+    });
+  }
+  /* кнопки «показать подсказки» для карточек заданий */
+  function wireHints() {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-hint]"), function (b) {
+      b.onclick = function () {
+        var hints = $(b.dataset.hint).querySelectorAll(".hint"), on = !hints[0].classList.contains("on");
+        Array.prototype.forEach.call(hints, function (h) { h.classList.toggle("on", on); });
+        b.textContent = on ? "Скрыть подсказки" : "Показать подсказки";
+      };
+    });
+  }
+  /* расставить по порядку: items в правильном порядке, shuffled — порядок показа */
+  function order(cfg) {
+    var box = $(cfg.box), picks = [], els = [];
+    cfg.shuffled.forEach(function (i) {
+      var b = document.createElement("button"); b.className = "ostep";
+      b.innerHTML = '<span class="oi">·</span><span>' + esc(cfg.items[i]) + "</span><em></em>";
+      b.onclick = function () { if (b.dataset.n) return; picks.push(i); b.dataset.n = picks.length; b.querySelector(".oi").textContent = picks.length; b.classList.add("on"); $(cfg.verdict).textContent = ""; };
+      box.appendChild(b); els.push({ b: b, i: i });
+    });
+    $(cfg.check).onclick = function () {
+      if (picks.length < cfg.items.length) { $(cfg.verdict).textContent = "Расставьте все шаги · осталось: " + (cfg.items.length - picks.length); $(cfg.verdict).className = "verdict bad"; return; }
+      var ok = 0;
+      els.forEach(function (e) { var good = Number(e.b.dataset.n) - 1 === e.i; e.b.classList.remove("ok", "no"); e.b.classList.add(good ? "ok" : "no"); e.b.querySelector("em").textContent = good ? "" : "место " + (e.i + 1); if (good) ok++; });
+      $(cfg.verdict).textContent = "На своём месте " + ok + " из " + cfg.items.length;
+      $(cfg.verdict).className = "verdict " + (ok === cfg.items.length ? "good" : "bad");
+    };
+    $(cfg.reset).onclick = function () { picks = []; els.forEach(function (e) { delete e.b.dataset.n; e.b.className = "ostep"; e.b.querySelector(".oi").textContent = "·"; e.b.querySelector("em").textContent = ""; }); $(cfg.verdict).textContent = ""; };
+  }
+  /* поля для счёта руками: ответы проверяются только когда заполнены все */
+  function calc(cfg) {
+    var list;
+    function reset() { $(cfg.box).innerHTML = new Array(cfg.answers.length).fill('<input inputmode="decimal">').join(""); list = Array.prototype.slice.call($(cfg.box).querySelectorAll("input")); $(cfg.verdict).textContent = ""; }
+    $(cfg.check).onclick = function () {
+      var empty = list.filter(function (el) { return !el.value.trim(); }).length;
+      if (empty) { $(cfg.verdict).textContent = "Заполните все клетки · осталось: " + empty; $(cfg.verdict).className = "verdict bad"; return; }
+      var ok = 0;
+      list.forEach(function (el, i) { var good = Math.abs(Number(String(el.value).replace(",", ".")) - cfg.answers[i]) < 0.011; el.className = good ? "ok" : "no"; if (good) ok++; });
+      $(cfg.verdict).textContent = "Верно " + ok + " из " + list.length + (ok < list.length ? " · правильные ответы: " + cfg.answers.join(", ") : "");
+      $(cfg.verdict).className = "verdict " + (ok === list.length ? "good" : "bad");
+    };
+    $(cfg.reset).onclick = reset; reset();
+  }
+
+  /* ================= данные настоящего запуска ================= */
+  var RUN = {
+    trainLoss: [1.4500, 1.1308, 1.0289, 0.9596, 0.9440, 0.8984, 0.8730, 0.8339, 0.7900, 0.7494, 0.7312, 0.7229, 0.6654, 0.6480, 0.6515, 0.6088, 0.5893, 0.5511, 0.5435, 0.5274, 0.5079, 0.4990, 0.4868, 0.4802, 0.4868, 0.4855],
+    valLoss: [1.2676, 1.0955, 1.0181, 0.9717, 0.9565, 0.9165, 0.9098, 0.8831, 0.8157, 0.7965, 0.8014, 0.7730, 0.7901, 0.7227, 0.7664, 0.7386, 0.7137, 0.8575, 0.7679, 0.7720, 0.6968, 0.6940, 0.7089, 0.6904, 0.7002, 0.6824]
+  };
+
+  /* график ошибок: series = [[значения, цвет]], n — сколько эпох показать */
+  function lossChart(ctx, n, opt) {
+    var W = ctx.W, H = ctx.H, L = 52, R = 14, T = 16, B = 38;
+    var lo = opt.lo, hi = opt.hi;
+    function X(i) { return L + (W - L - R) * (i - 0.5) / n; }
+    function Y(v) { return T + (H - T - B) * (hi - v) / (hi - lo); }
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = C.soft; ctx.lineWidth = 1; ctx.font = font(11); ctx.fillStyle = C.faint; ctx.textAlign = "right";
+    for (var v = lo; v <= hi + 1e-9; v += opt.step) {
+      ctx.beginPath(); ctx.moveTo(L, Y(v)); ctx.lineTo(W - R, Y(v)); ctx.stroke();
+      ctx.fillText(v.toFixed(1), L - 8, Y(v) + 4);
+    }
+    ctx.textAlign = "center";
+    for (var e = 1; e <= n; e++) if (e === 1 || e % 5 === 0) ctx.fillText(String(e), X(e), H - 20);
+    cap(ctx, "эпоха", (L + W - R) / 2, H - 4, C.faint, 11);
+    if (opt.sep) {
+      ctx.setLineDash([5, 5]); ctx.strokeStyle = C.faint; ctx.beginPath(); ctx.moveTo(X(opt.sep + 0.5), T); ctx.lineTo(X(opt.sep + 0.5), H - B); ctx.stroke(); ctx.setLineDash([]);
+      cap(ctx, "цикл 1 · lr 0.001", X(opt.sep / 2 + 0.5), T + 12, C.dim, 11);
+      cap(ctx, "цикл 2 · 0.0001", X((opt.sep + n) / 2 + 0.5), T + 12, C.dim, 11);
+    }
+    opt.series.forEach(function (s) {
+      ctx.strokeStyle = s[1]; ctx.lineWidth = 2; ctx.beginPath();
+      for (var i = 0; i < n; i++) { if (i) ctx.lineTo(X(i + 1), Y(s[0][i])); else ctx.moveTo(X(1), Y(s[0][0])); }
+      ctx.stroke(); ctx.lineWidth = 1;
+      for (var j = 0; j < n; j++) circle(ctx, X(j + 1), Y(s[0][j]), 2.6, s[1]);
+    });
+    if (opt.best) {
+      var bx = X(opt.best), by = Y(RUN.valLoss[opt.best - 1]);
+      circle(ctx, bx, by, 8, null, C.teal); circle(ctx, bx, by, 4, C.teal);
+      ctx.fillStyle = C.teal; ctx.font = font(12); ctx.textAlign = "center"; ctx.fillText("эпоха " + opt.best + " · " + RUN.valLoss[opt.best - 1], bx - 10, by + 26);
+    }
+  }
+
+  /* 01 титул */
+  (function () {
+    var c = cv("tiCv"), t0 = null, NAMES = [["обучение", "эпохи 1…20, lr = 0.001"], ["файл весов", "flowers-…_017-0.713699.pt"], ["дообучение", "эпохи 21…26, lr = 0.0001"]];
+    loop($("s1"), function (ts) {
+      if (t0 === null) t0 = ts; var t = ((ts - t0) / 2600) % 1;
+      c.clearRect(0, 0, 410, 330);
+      NAMES.forEach(function (n, i) {
+        var y = 40 + i * 92, on = Math.floor(t * 3) === i;
+        node(c, 40, y, 330, 60, "", on ? "rgba(224,145,63,.18)" : "#16202c", on ? C.amberHi : C.line);
+        c.fillStyle = on ? C.amberHi : C.dim; c.font = font(17); c.textAlign = "left"; c.fillText(n[0], 60, y + 27);
+        c.fillStyle = C.faint; c.font = font(12); c.fillText(n[1], 60, y + 47);
+        if (i < 2) arrow(c, 205, y + 60, 205, y + 92, on ? C.amberHi : "rgba(157,175,194,.3)");
+      });
+    });
+  })();
+
+
+
+  /* 05 сохранение в игре */
+  (function () {
+    var c = cv("saveCv"), start = null, CRASH = 13, N = 20;
+    function track(y, label, done, restarted, marks) {
+      c.fillStyle = C.dim; c.font = font(13, false); c.textAlign = "left"; c.fillText(label, 20, y - 12);
+      for (var e = 1; e <= N; e++) {
+        var x = 20 + (e - 1) * 30;
+        c.fillStyle = e <= done ? (restarted ? "rgba(212,112,95,.55)" : "rgba(84,182,164,.6)") : "#16202c";
+        c.fillRect(x, y, 26, 30); c.strokeStyle = C.line; c.strokeRect(x + .5, y + .5, 26, 30);
+        if (marks && e <= done) { c.fillStyle = C.amberHi; c.beginPath(); c.moveTo(x + 13, y + 36); c.lineTo(x + 17, y + 41); c.lineTo(x + 13, y + 46); c.lineTo(x + 9, y + 41); c.fill(); }
+      }
+    }
+    loop($("s5"), function (ts) {
+      var ep = start === null ? 0 : Math.min(CRASH + N, Math.floor((ts - start) / 220)), crashed = ep > CRASH;
+      c.clearRect(0, 0, 640, 300);
+      track(50, "без сохранения", crashed ? ep - CRASH : ep, crashed, false);
+      track(170, "веса после каждой эпохи", Math.min(ep, N), false, true);
+      if (crashed) {
+        c.font = font(12); c.textAlign = "left";
+        c.fillStyle = C.rose; c.fillText("эпоха 13: сеанс оборвался → всё заново с эпохи 1", 20, 108);
+        c.fillStyle = C.teal; c.fillText("эпоха 13: загрузили файл весов → продолжаем с 14-й", 20, 236);
+      }
+      cap(c, "клетка — одна эпоха · ромбик — файл весов", 320, 290, C.faint, 11);
+      if (start !== null && ep >= CRASH + N) { $("saveInfo").textContent = "с чекпоинтами — 20 эпох работы, без них — 33: тринадцать потеряно"; $("saveInfo").className = "verdict good"; }
+    });
+    $("saveRun").onclick = function () { start = performance.now(); $("saveInfo").textContent = "учим…"; $("saveInfo").className = "verdict"; };
+  })();
+
+  /* 07 разбор save / load */
+  anat("slAnat", [
+    ["torch.save(", "<b>torch.save</b> записывает объект Python в файл. Для модели сохраняем не саму модель, а её словарь весов."],
+    ["model.state_dict()", "<b>Словарь весов:</b> имя слоя → тензор. Архитектура в файл не попадает — только числа."],
+    [", SAVE_DIR + '/flowers.pt'", "<b>Путь к файлу.</b> В Colab — на Google Диске, иначе файл исчезнет вместе с сеансом. Расширение <code>.pt</code> — договорённость."],
+    [")\n", null],
+    ["model2.load_state_dict(", "<b>Раскладывает числа по слоям</b> модели <code>model2</code>. Она должна быть создана тем же кодом, что и сохранённая, иначе — <code>size mismatch</code>."],
+    ["torch.load(SAVE_DIR + '/flowers.pt')", "<b>Читает словарь из файла</b> обратно в память. Веса сохранены на GPU, а грузите на компьютер без GPU — добавьте <code>map_location='cpu'</code>."],
+    [")", null]
+  ]);
+
+  /* 09 проверочная выборка */
+  (function () {
+    var c = cv("splitCv"), COLS = ["#e0913f", "#54b6a4", "#d4705f", "#9a8ac9", "#6aa0d8"], NAMES = ["daisy", "dandelion", "rose", "sunflower", "tulip"], CELLS = [18, 24, 18, 17, 23];
+    var cls = [], pos = [], from = [], to = [], t0 = null, cut = false, rnd = R(7);
+    CELLS.forEach(function (n, k) { for (var i = 0; i < n; i++) cls.push(k); });
+    for (var i = 0; i < 100; i++) { pos.push(i); from.push(i); to.push(i); }
+    $("splitLegend").innerHTML = NAMES.map(function (n, k) { return '<span><i style="background:' + COLS[k] + '"></i>' + n + "</span>"; }).join("");
+    function xy(p) { return { x: 20 + (p % 20) * 30, y: 20 + Math.floor(p / 20) * 42 }; }
+    loop($("s9"), function (ts) {
+      var k = t0 === null ? 1 : Math.min(1, (ts - t0) / 900);
+      c.clearRect(0, 0, 640, 250);
+      for (var i = 0; i < 100; i++) {
+        var a = xy(from[i]), b = xy(to[i]), e = k < 1 ? (1 - Math.cos(k * Math.PI)) / 2 : 1;
+        var x = lerp(a.x, b.x, e), y = lerp(a.y, b.y, e), inVal = cut && to[i] >= 85;
+        c.globalAlpha = cut && !inVal ? 0.35 : 1;
+        c.fillStyle = COLS[cls[i]]; c.fillRect(x, y, 26, 34);
+        c.globalAlpha = 1;
+        if (inVal) { c.strokeStyle = C.text; c.lineWidth = 2; c.strokeRect(x - 1, y - 1, 28, 36); c.lineWidth = 1; }
+      }
+      if (cut) { cap(c, "проверка: последние 15 %", 470, 244, C.text, 12); }
+      if (k >= 1) t0 = null;
+    });
+    $("cutRaw").onclick = function () {
+      for (var i = 0; i < 100; i++) { from[i] = to[i] = i; } cut = true; t0 = null;
+      $("splitInfo").textContent = "в проверке только tulip: 647 из 647 — остальных классов нет"; $("splitInfo").className = "verdict bad";
+    };
+    $("shuffle").onclick = function () {
+      var p = []; for (var i = 0; i < 100; i++) p.push(i);
+      for (var j = 99; j > 0; j--) { var r = Math.floor(rnd() * (j + 1)), tmp = p[j]; p[j] = p[r]; p[r] = tmp; }
+      for (var q = 0; q < 100; q++) { from[q] = to[q]; to[q] = p[q]; }
+      cut = false; t0 = performance.now();
+      $("splitInfo").textContent = "номера перемешаны: torch.randperm(4317)"; $("splitInfo").className = "verdict";
+    };
+    $("cutMixed").onclick = function () {
+      cut = true;
+      $("splitInfo").textContent = "настоящий запуск: daisy 104 · dandelion 153 · rose 130 · sunflower 122 · tulip 138"; $("splitInfo").className = "verdict good";
+    };
+  })();
+
+  /* 10 переобучение: первый цикл */
+  (function () {
+    var c = cv("ovCv");
+    $("s10").addEventListener("shown", function () {
+      lossChart(c, 20, { lo: 0.5, hi: 1.5, step: 0.1, best: 17, series: [[RUN.trainLoss, C.violet], [RUN.valLoss, C.amber]] });
+    });
+  })();
+
+  /* 11 разбор шаблона имени */
+  anat("nmAnat", [
+    ["weights = SAVE_DIR + '/", "<b>Папка</b> на Google Диске. Всё, что после <code>/</code>, — имя файла."],
+    ["flowers-", "<b>Название задачи.</b> Чтобы в одной папке не путались веса разных датасетов: <code>flowers-…</code>, <code>food-01-…</code>."],
+    ["@@dt@@", "<b>Метка для даты.</b> До обучения заменяем её через <code>.replace</code> на текущие дату и время <code>2026-10-04_22-12</code>. Каждый запуск — своя группа файлов."],
+    ["_{epoch:03d}", "<b>Номер эпохи тремя цифрами:</b> 7 → <code>007</code>. Так файлы сортируются по порядку: 007 раньше 010."],
+    ["-{val_loss:.6f}", "<b>Ошибка на проверке</b> с шестью знаками после точки. По этому числу ищем лучший файл, даже если журнал обучения пропал."],
+    [".pt'", "<b>Расширение</b> файла весов PyTorch."]
+  ]);
+
+  /* 12 список файлов */
+  (function () {
+    var F = [["010", "0.796489"], ["011", "0.801441"], ["012", "0.772997"], ["013", "0.790065"], ["014", "0.722673"], ["015", "0.766437"], ["016", "0.738573"], ["017", "0.713699"], ["018", "0.857486"], ["019", "0.767895"], ["020", "0.772024"]];
+    var box = $("fileList"), rows = [];
+    F.forEach(function (f) { var d = document.createElement("div"); d.innerHTML = "flowers-2026-10-04_22-12_" + f[0] + "-<b>" + f[1] + "</b>.pt"; box.appendChild(d); rows.push(d); });
+    $("findBest").onclick = function () {
+      var bi = 0; F.forEach(function (f, i) { if (parseFloat(f[1]) < parseFloat(F[bi][1])) bi = i; });
+      rows.forEach(function (r, i) { r.classList.toggle("best", i === bi); });
+      $("bestInfo").textContent = "эпоха " + Number(F[bi][0]) + " · val_loss " + F[bi][1] + " — не последняя"; $("bestInfo").className = "verdict good";
+    };
+  })();
+
+  /* 13 большой и маленький шаг */
+  (function () {
+    var c = cv("lrCv"), path = [], t0 = null, mode = null;
+    function f(x) { return 0.5 * x * x; }
+    function SX(x) { return 320 + x * 52; } function SY(y) { return 255 - y * 15; }
+    function run(lr, n) { var x = -5.2, p = [x]; for (var i = 0; i < n; i++) { x = x - lr * x; p.push(x); } return p; }
+    loop($("s13"), function (ts) {
+      c.clearRect(0, 0, 640, 300);
+      c.strokeStyle = C.dim; c.lineWidth = 2; c.beginPath();
+      for (var x = -5.8; x <= 5.8; x += 0.05) { if (x === -5.8) c.moveTo(SX(x), SY(f(x))); else c.lineTo(SX(x), SY(f(x))); }
+      c.stroke(); c.lineWidth = 1;
+      cap(c, "ошибка", 40, 30, C.faint, 11); cap(c, "минимум", SX(0), 285, C.teal, 11);
+      if (!path.length) return;
+      var k = t0 === null ? path.length - 1 : Math.min(path.length - 1, Math.floor((ts - t0) / 380));
+      c.strokeStyle = mode === "big" ? "rgba(212,112,95,.6)" : "rgba(84,182,164,.6)";
+      for (var i = 1; i <= k; i++) arrow(c, SX(path[i - 1]), SY(f(path[i - 1])) - 6, SX(path[i]), SY(f(path[i])) - 6, mode === "big" ? "rgba(212,112,95,.7)" : "rgba(84,182,164,.7)");
+      circle(c, SX(path[k]), SY(f(path[k])) - 6, 8, mode === "big" ? C.rose : C.teal);
+    });
+    $("lrBig").onclick = function () { mode = "big"; path = run(1.92, 10); t0 = performance.now(); $("lrInfo").textContent = "прыгает со склона на склон, к минимуму почти не приближается"; $("lrInfo").className = "verdict bad"; };
+    $("lrSmall").onclick = function () { mode = "small"; path = run(0.45, 10); t0 = performance.now(); $("lrInfo").textContent = "шаги короче — спокойно спускается к минимуму"; $("lrInfo").className = "verdict good"; };
+  })();
+
+  /* 14 два цикла */
+  (function () {
+    var c = cv("ftCv");
+    $("s14").addEventListener("shown", function () {
+      lossChart(c, 26, { lo: 0.4, hi: 1.6, step: 0.2, sep: 20, series: [[RUN.trainLoss, C.violet], [RUN.valLoss, C.amber]] });
+    });
+  })();
+
+  /* 17 порядок */
+  order({
+    box: "ord1", check: "ord1check", reset: "ord1reset", verdict: "ord1v",
+    items: ["скачать архив и загрузить картинки в x_all, y_all", "перемешать номера и разделить на train / val", "создать модель и шаблон имени весов с датой", "первый цикл: fit с lr = 1e-3 и callback=checkpoint", "найти файл с наименьшим val_loss и загрузить его", "дообучить с lr = 1e-4 в тот же history", "сравнить лучшие эпохи циклов на графике"],
+    shuffled: [3, 0, 5, 1, 6, 2, 4]
+  });
+
+  /* 18–20 карточки заданий */
+  steps("pr1", [
+    ["1.1", "Сколько фото в классах", "Посчитать картинки каждого класса и напечатать «название: количество».", "daisy: 764\n…\ntulip: 984", "torch.bincount считает, сколько раз встречается каждая метка"],
+    ["2.1", "Разделить выборку", "Перемешать номера и отрезать 15 % в проверку. Напечатать формы четырёх массивов.", "x_train (3670, 3, 96, 96)\nx_val   (647, 3, 96, 96)", "randperm, потом два среза: до n_val и после"],
+    ["2.2", "Все ли классы в проверке", "Для каждого класса — сколько картинок в y_val и какая это доля от класса.", "у всех доля ≈ 0.15", "bincount для y_val и для y_all, поделить одно на другое"]
+  ]);
+  steps("pr2", [
+    ["3.1", "Первые три эпохи", "Создать модель, пустой журнал history и обучить 3 эпохи с lr = 1e-3.", "эпоха 3 | … val acc ≈ 0.6", "fit(модель, эпохи, lr, журнал)"],
+    ["4.1", "Сохранить веса", "Записать state_dict в SAVE_DIR/flowers.pt и напечатать размер файла в КБ.", "≈ 275 КБ", "os.path.getsize даёт байты"],
+    ["4.2", "Загрузить в новую модель", "Точность новой модели до загрузки весов и после.", "до ≈ 0.2\nпосле = как у model", "torch.load читает словарь, load_state_dict раскладывает его"]
+  ]);
+  steps("pr3", [
+    ["5.1", "Функция checkpoint", "Сохранять веса по шаблону weights. Проверить вызовом с эпохой 0.", "flowers-…_000-1.0….pt", "weights.format(epoch=…, val_loss=…)"],
+    ["5.2–5.3", "Цикл 1 и лучший файл", "20 эпох с callback=checkpoint. Потом найти файл с наименьшим val_loss и загрузить.", "лучший: …_017-0.713699.pt\n(у вас — свой)", "хвост имени отделяет rsplit('-', 1); дальше min с key"],
+    ["6.1–6.2", "Дообучение", "6 эпох с lr = 1e-4 в тот же history, графики и лучшая эпоха каждого цикла.", "эпохи 21…26\nцикл 2: val_loss ниже", "модель заново не создаём"]
+  ]);
+  wireHints();
+
+  /* 22 квиз */
+  quiz({ box: "quiz1", verdict: "quiz1v", check: "quiz1check", reset: "quiz1reset", items: [
+    { t: "Что записывает torch.save(model.state_dict(), p)?", o: ["только веса", "веса и архитектуру", "весь ноутбук"], a: 0, w: "state_dict — словарь чисел; архитектуру создаём кодом" },
+    { t: "Куда сохранять веса в Colab?", o: ["/content", "Google Диск", "в переменную"], a: 1, w: "/content стирается вместе с сеансом" },
+    { t: "Зачем проверочная выборка?", o: ["учиться на большем", "выбрать лучшую эпоху", "ускорить обучение"], a: 1, w: "на ней сеть не учится, поэтому видно переобучение" },
+    { t: "Отрезали последние 15 % без перемешивания", o: ["в проверке один класс", "всё в порядке", "ошибка Python"], a: 0, w: "картинки лежат по порядку классов" },
+    { t: "'{epoch:03d}'.format(epoch=7)", o: ["7", "007", "7.000"], a: 1, w: "03d — целое, три знака, дополнить нулями" },
+    { t: "Какой файл весов грузим для дообучения?", o: ["последний", "с наименьшим val_loss", "с наибольшим train_acc"], a: 1, w: "лучшая эпоха — по ошибке на проверке" },
+    { t: "lr для дообучения по сравнению с первым циклом", o: ["в 10 раз больше", "такой же", "в 10 раз меньше"], a: 2, w: "маленькие шаги — аккуратный спуск" },
+    { t: "load_state_dict пишет size mismatch", o: ["другая архитектура", "файл пустой", "нет GPU"], a: 0, w: "формы весов в файле не совпали с моделью" }
+  ]});
+
+  var h = (location.hash || "").match(/^#s(\d+)$/);
+  show(h ? Number(h[1]) - 1 : 0);
+})();
+</script>
+</body>
+</html>
